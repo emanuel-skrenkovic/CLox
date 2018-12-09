@@ -1,6 +1,12 @@
 # Prerequisites
 *.d
 
+# Binaries
+bin/
+
+#VSCode
+.vscode
+
 # Object files
 *.o
 *.ko
