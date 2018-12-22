@@ -6,10 +6,10 @@ c_files := $(wildcard ./src/*.c)
 h_files := $(wildcard ./src/*.h)
 
 ./bin/%.o: %.c $(h_files)
-	$(cc) -c -o $@ $< 
+	$(cc) -c -o $@ $<
 	
 ./bin/main: $(c_files)
-	$(cc) -o $@ $^ $(flags) 
+	$(cc) -g -o $@ $^ $(flags) $(extra)
 
 run: ./bin/main
-	@./bin/main
+	@./bin/main $(t)

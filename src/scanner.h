@@ -9,11 +9,12 @@ typedef enum {
   TOKEN_SEMICOLON, TOKEN_SLASH, TOKEN_STAR,
 
   // One or two character tokens.                     
+  TOKEN_QUESTIONMARK,
   TOKEN_BANG, TOKEN_BANG_EQUAL,                       
   TOKEN_EQUAL, TOKEN_EQUAL_EQUAL,                     
   TOKEN_GREATER, TOKEN_GREATER_EQUAL,                 
   TOKEN_LESS, TOKEN_LESS_EQUAL,                       
-  TOKEN_COLON_EQUAL,
+  TOKEN_COLON, TOKEN_COLON_EQUAL,
 
   // Literals.                                        
   TOKEN_IDENTIFIER, TOKEN_STRING, TOKEN_NUMBER,       
