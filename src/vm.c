@@ -4,6 +4,7 @@
 
 #include "common.h"
 #include "compiler.h"
+#include "object.h"
 #include "memory.h"
 #include "debug.h"
 #include "vm.h"
@@ -168,10 +169,12 @@ static InterpretResult run()
 void initVM() 
 {
 	resetStack();	
+    vm.objects = NULL;
 }
 
 void freeVM() 
 {
+    freeObjects();
 }
 
 void push(Value value)
