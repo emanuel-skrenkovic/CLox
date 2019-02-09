@@ -22,6 +22,8 @@ static void concatenate()
     ObjString* b = AS_STRING(pop());
     ObjString* a = AS_STRING(pop());
 
+    printf("reached concatenate \n");
+
     int length = a->length + b->length;
     char* chars = ALLOCATE(char, length + 1);
     memcpy(chars, a->chars, a->length);
@@ -125,6 +127,7 @@ static InterpretResult run()
                     runtimeError("Operands must be two numbers or two strings.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
+                break;
             }
 
 			case OP_SUBTRACT:
