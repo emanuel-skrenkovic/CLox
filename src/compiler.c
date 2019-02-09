@@ -203,6 +203,12 @@ static void number()
     emitConstant(NUMBER_VAL(value));
 }
 
+static void string()
+{
+    emitConstant(OBJ_VAL(copyString(parser.previous.start + 1,
+                                    parser.previous.length - 2)));
+}
+
 static void unary()
 {
     TokenType operatorType = parser.previous.type;
@@ -217,7 +223,7 @@ static void unary()
     }
 }
 
-ParseRule rules[] = {                                              
+ParseRule rules[] = {
     { grouping, NULL,    PREC_CALL },       // TOKEN_LEFT_PAREN      
     { NULL,     NULL,    PREC_NONE },       // TOKEN_RIGHT_PAREN     
     { NULL,     NULL,    PREC_NONE },       // TOKEN_LEFT_BRACE
@@ -241,7 +247,7 @@ ParseRule rules[] = {
     { NULL,     NULL,    PREC_NONE },       // TOKEN_COLON
     { NULL,     NULL,    PREC_NONE },       // TOKEN_COLON_EQUAL
     { NULL,     NULL,    PREC_NONE },       // TOKEN_IDENTIFIER      
-    { NULL,     NULL,    PREC_NONE },       // TOKEN_STRING          
+    { string,   NULL,    PREC_NONE },       // TOKEN_STRING          
     { number,   NULL,    PREC_NONE },       // TOKEN_NUMBER          
     { NULL,     NULL,    PREC_AND },        // TOKEN_AND             
     { NULL,     NULL,    PREC_NONE },       // TOKEN_CLASS           
@@ -261,7 +267,7 @@ ParseRule rules[] = {
     { NULL,     NULL,    PREC_NONE },       // TOKEN_WHILE           
     { NULL,     NULL,    PREC_NONE },       // TOKEN_ERROR           
     { NULL,     NULL,    PREC_NONE },       // TOKEN_EOF             
-};                                 
+};
 
 static void parsePrecedence(Precedence precedence)
 {
