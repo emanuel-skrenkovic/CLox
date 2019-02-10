@@ -107,7 +107,7 @@ static InterpretResult run()
                 push(BOOL_VAL(valuesEqual(a, b)));
                 break;
             }
-            
+
             case OP_GREATER:
                 BINARY_OP(BOOL_VAL, >);
                 break;
@@ -116,7 +116,7 @@ static InterpretResult run()
                 BINARY_OP(BOOL_VAL, <);
                 break;
 
-			case OP_ADD: {
+            case OP_ADD: {
                 if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
                     concatenate();
                 } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
@@ -130,8 +130,8 @@ static InterpretResult run()
                 break;
             }
 
-			case OP_SUBTRACT:
-				BINARY_OP(NUMBER_VAL, -);
+            case OP_SUBTRACT:
+                BINARY_OP(NUMBER_VAL, -);
 				break;
 
 			case OP_MULTIPLY:
@@ -173,10 +173,12 @@ void initVM()
 {
 	resetStack();	
     vm.objects = NULL;
+    initTable(&vm.strings);
 }
 
 void freeVM() 
 {
+    freeTable(&vm.strings);
     freeObjects();
 }
 
