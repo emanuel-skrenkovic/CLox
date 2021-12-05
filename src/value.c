@@ -53,7 +53,7 @@ bool valuesEqual(Value a, Value b)
         case VAL_OBJ:    return AS_OBJ(a) == AS_OBJ(b);
     }
 
-    // TODO only here to remove warning. 
+    // TODO only here to remove warning.
     // Switch exhausts every possible option
     return false;
 }
