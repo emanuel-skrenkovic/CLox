@@ -13,3 +13,6 @@ h_files := $(wildcard ./src/*.h)
 
 run: ./bin/main
 	@./bin/main $(t)
+
+test: ./bin/main
+	find tests/ -maxdepth 1 -type f -exec ./bin/main {} \;
