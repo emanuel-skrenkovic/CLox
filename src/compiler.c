@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "common.h"
 #include "compiler.h"
@@ -129,6 +130,27 @@ static void emitBytes(uint8_t byte1, uint8_t byte2)
 static void emitReturn()
 {
     emitByte(OP_RETURN);
+}
+
+static bool getConstant(ObjString* objString, uint8_t* constValue)
+{
+    Chunk* chunk = currentChunk();
+    ValueArray valueArray = chunk->constants;
+
+    for (int chunkNum = 0; chunkNum < chunk->count; ++chunkNum) {
+        Value value = valueArray.values[chunkNum];
+
+        if (!IS_STRING(value)) { continue; }
+
+        ObjString* constObj = AS_STRING(value);
+
+        if (memcmp(objString->chars, constObj->chars, constObj->length) == 0) {
+            *constValue = (uint8_t) chunkNum;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static uint8_t makeConstant(Value value)
@@ -406,8 +428,15 @@ static void parsePrecedence(Precedence precedence)
 
 static uint8_t identifierConstant(Token* name)
 {
-    return makeConstant(OBJ_VAL(copyString(name->start,
-                                           name->length)));
+    uint8_t constant = 0;
+    ObjString* tokenString = copyString(name->start,
+                                        name->length);
+
+    if (getConstant(tokenString, &constant)) {
+        return constant;
+    }
+
+    return makeConstant(OBJ_VAL(tokenString));
 }
 
 static uint8_t parseVariable(const char* errorMessage)
