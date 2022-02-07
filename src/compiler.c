@@ -276,6 +276,23 @@ static void block()
     consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
 }
 
+static void letDeclaration()
+{
+    // TODO: check this
+    uint8_t global = parseVariable("Expect variable name.");
+
+    if (!match(TOKEN_EQUAL)) {
+        error("Expect definition as part of let declaration.");
+    }
+
+    expression();
+
+    consume(TOKEN_SEMICOLON,
+            "Expect ';' after let variable declaration.");
+
+    defineVariable(global);
+}
+
 static void varDeclaration()
 {
     uint8_t global = parseVariable("Expect variable name.");
@@ -316,6 +333,7 @@ static void synchronize()
         case TOKEN_CLASS:
         case TOKEN_FUN:
         case TOKEN_VAR:
+        case TOKEN_LET:
         case TOKEN_FOR:
         case TOKEN_IF:
         case TOKEN_WHILE:
@@ -348,6 +366,8 @@ static void declaration()
 {
     if (match(TOKEN_VAR)) {
         varDeclaration();
+    } else if(match(TOKEN_LET)) {
+        letDeclaration();
     } else {
         statement();
     }
@@ -455,6 +475,7 @@ ParseRule rules[] = {
     { NULL,     NULL,    PREC_NONE },       // TOKEN_THIS
     { literal,  NULL,    PREC_NONE },       // TOKEN_TRUE
     { NULL,     NULL,    PREC_NONE },       // TOKEN_VAR
+    { NULL,     NULL,    PREC_NONE },       // TOKEN_LET
     { NULL,     NULL,    PREC_NONE },       // TOKEN_WHILE
     { NULL,     NULL,    PREC_NONE },       // TOKEN_ERROR
     { NULL,     NULL,    PREC_NONE },       // TOKEN_EOF
