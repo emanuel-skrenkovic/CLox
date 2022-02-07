@@ -42,6 +42,7 @@ typedef struct {
 typedef struct {
     Token name;
     int depth;
+    bool mutable;
 } Local;
 
 typedef struct {
@@ -148,6 +149,7 @@ static bool getConstant(ObjString* objString, uint8_t* constValue)
     Chunk* chunk = currentChunk();
     ValueArray valueArray = chunk->constants;
 
+    // TODO: walk backwards?
     for (int chunkNum = 0; chunkNum < chunk->count; ++chunkNum) {
         Value value = valueArray.values[chunkNum];
 
@@ -221,10 +223,10 @@ static void statement();
 static void declaration();
 static ParseRule* getRule(TokenType type);
 static void parsePrecedence(Precedence precedence);
-static uint8_t parseVariable(const char* errorMessage);
+static uint8_t parseVariable(const char* errorMessage, bool mutable);
 static void defineVariable(uint8_t global);
 static uint8_t identifierConstant(Token* name);
-static int resolveLocal(Compiler* compiler, Token* name);
+static int resolveLocal(Compiler* compiler, Token* name, Local* resolvedLocal);
 
 
 static void binary(bool canAssign)
@@ -279,7 +281,7 @@ static void block()
 static void letDeclaration()
 {
     // TODO: check this
-    uint8_t global = parseVariable("Expect variable name.");
+    uint8_t global = parseVariable("Expect variable name.", false);
 
     if (!match(TOKEN_EQUAL)) {
         error("Expect definition as part of let declaration.");
@@ -295,7 +297,7 @@ static void letDeclaration()
 
 static void varDeclaration()
 {
-    uint8_t global = parseVariable("Expect variable name.");
+    uint8_t global = parseVariable("Expect variable name.", true);
 
     if (match(TOKEN_EQUAL)) {
         expression();
@@ -396,7 +398,9 @@ static void string(bool canAssign)
 static void namedVariable(Token name, bool canAssign)
 {
     uint8_t getOp, setOp;
-    int arg = resolveLocal(current, &name);
+
+    Local local;
+    int arg = resolveLocal(current, &name, &local);
 
     if (arg != -1) {
         getOp = OP_GET_LOCAL;
@@ -408,6 +412,10 @@ static void namedVariable(Token name, bool canAssign)
     }
 
     if (canAssign && match(TOKEN_EQUAL)) {
+        if (!local.mutable) {
+            error("Cannot reassign let variable.");
+        }
+
         expression();
         emitBytes(setOp, arg);
     } else {
@@ -525,7 +533,7 @@ static bool identifiersEqual(Token* a, Token* b)
     return memcmp(a->start, b->start, a->length) == 0;
 }
 
-static int resolveLocal(Compiler* compiler, Token* name)
+static int resolveLocal(Compiler* compiler, Token* name, Local* resolvedLocal)
 {
     for (int i = compiler->localCount - 1; i >= 0; i--) {
         Local* local = &compiler->locals[i];
@@ -534,6 +542,8 @@ static int resolveLocal(Compiler* compiler, Token* name)
                 error("Can't read local variable in its own initializer.");
             }
 
+            *resolvedLocal = *local;
+
             return i;
         }
     }
@@ -541,7 +551,7 @@ static int resolveLocal(Compiler* compiler, Token* name)
     return -1;
 }
 
-static void addLocal(Token name)
+static void addLocal(Token name, bool mutable)
 {
     if (current->localCount == UINT8_COUNT) {
         error("Too many local variables in function.");
@@ -551,9 +561,10 @@ static void addLocal(Token name)
     Local* local = &current->locals[current->localCount++];
     local->name = name;
     local->depth = -1;
+    local->mutable = mutable;
 }
 
-static void declareVariable()
+static void declareVariable(bool mutable)
 {
     if (current->scopeDepth == 0) return;
 
@@ -570,14 +581,14 @@ static void declareVariable()
         }
     }
 
-    addLocal(*name);
+    addLocal(*name, mutable);
 }
 
-static uint8_t parseVariable(const char* errorMessage)
+static uint8_t parseVariable(const char* errorMessage, bool mutable)
 {
     consume(TOKEN_IDENTIFIER, errorMessage);
 
-    declareVariable();
+    declareVariable(mutable);
     if (current->scopeDepth > 0) return 0;
 
     return identifierConstant(&parser.previous);
