@@ -41,6 +41,11 @@ typedef struct {
 
 typedef struct {
     Token name;
+    bool mutable;
+} Global;
+
+typedef struct {
+    Token name;
     int depth;
     bool mutable;
 } Local;
@@ -48,6 +53,9 @@ typedef struct {
 typedef struct {
     Local locals[UINT8_COUNT];
     int localCount;
+
+    Global globals[UINT8_COUNT];
+
     int scopeDepth;
 } Compiler;
 
@@ -227,7 +235,8 @@ static uint8_t parseVariable(const char* errorMessage, bool mutable);
 static void defineVariable(uint8_t global);
 static uint8_t identifierConstant(Token* name);
 static int resolveLocal(Compiler* compiler, Token* name, Local* resolvedLocal);
-
+static void addGlobal(uint8_t constant, Token name, bool mutable);
+static Global resolveGlobal(uint8_t constant);
 
 static void binary(bool canAssign)
 {
@@ -402,17 +411,23 @@ static void namedVariable(Token name, bool canAssign)
     Local local;
     int arg = resolveLocal(current, &name, &local);
 
+    bool mutable = false;
+
     if (arg != -1) {
         getOp = OP_GET_LOCAL;
         setOp = OP_SET_LOCAL;
+        mutable = local.mutable;
     } else {
         arg = identifierConstant(&name);
+        Global global = resolveGlobal(arg);
+        mutable = global.mutable;
+
         getOp = OP_GET_GLOBAL;
         setOp = OP_SET_GLOBAL;
     }
 
     if (canAssign && match(TOKEN_EQUAL)) {
-        if (!local.mutable) {
+        if (!mutable) {
             error("Cannot reassign let variable.");
         }
 
@@ -435,10 +450,9 @@ static void unary(bool canAssign)
     expression();
 
     switch (operatorType) {
-        case TOKEN_BANG:  emitByte(OP_NOT); break;
-        case TOKEN_MINUS: emitByte(OP_NEGATE); break;
-        default:
-            return;
+    case TOKEN_BANG: emitByte(OP_NOT); break;
+    case TOKEN_MINUS: emitByte(OP_NEGATE); break;
+    default: return;
     }
 }
 
@@ -564,6 +578,18 @@ static void addLocal(Token name, bool mutable)
     local->mutable = mutable;
 }
 
+static Global resolveGlobal(uint8_t constant)
+{
+    return current->globals[constant];
+}
+
+static void addGlobal(uint8_t constant, Token name, bool mutable)
+{
+    Global* global = &current->globals[constant];
+    global->name = name;
+    global->mutable = mutable;
+}
+
 static void declareVariable(bool mutable)
 {
     if (current->scopeDepth == 0) return;
@@ -591,7 +617,10 @@ static uint8_t parseVariable(const char* errorMessage, bool mutable)
     declareVariable(mutable);
     if (current->scopeDepth > 0) return 0;
 
-    return identifierConstant(&parser.previous);
+    uint8_t constant = identifierConstant(&parser.previous);
+    addGlobal(constant, parser.previous, mutable);
+
+    return constant;
 }
 
 static void markInitialized()
