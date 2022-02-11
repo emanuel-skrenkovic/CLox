@@ -41,12 +41,21 @@ typedef struct {
 
 typedef struct {
     Token name;
+    bool mutable;
+} Global;
+
+typedef struct {
+    Token name;
     int depth;
+    bool mutable;
 } Local;
 
 typedef struct {
     Local locals[UINT8_COUNT];
     int localCount;
+
+    Global globals[UINT8_COUNT];
+
     int scopeDepth;
 } Compiler;
 
@@ -148,6 +157,7 @@ static bool getConstant(ObjString* objString, uint8_t* constValue)
     Chunk* chunk = currentChunk();
     ValueArray valueArray = chunk->constants;
 
+    // TODO: walk backwards?
     for (int chunkNum = 0; chunkNum < chunk->count; ++chunkNum) {
         Value value = valueArray.values[chunkNum];
 
@@ -221,11 +231,12 @@ static void statement();
 static void declaration();
 static ParseRule* getRule(TokenType type);
 static void parsePrecedence(Precedence precedence);
-static uint8_t parseVariable(const char* errorMessage);
+static uint8_t parseVariable(const char* errorMessage, bool mutable);
 static void defineVariable(uint8_t global);
 static uint8_t identifierConstant(Token* name);
-static int resolveLocal(Compiler* compiler, Token* name);
-
+static int resolveLocal(Compiler* compiler, Token* name, Local* resolvedLocal);
+static void addGlobal(uint8_t constant, Token name, bool mutable);
+static Global resolveGlobal(uint8_t constant);
 
 static void binary(bool canAssign)
 {
@@ -276,9 +287,26 @@ static void block()
     consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
 }
 
+static void letDeclaration()
+{
+    // TODO: check this
+    uint8_t global = parseVariable("Expect variable name.", false);
+
+    if (!match(TOKEN_EQUAL)) {
+        error("Expect definition as part of let declaration.");
+    }
+
+    expression();
+
+    consume(TOKEN_SEMICOLON,
+            "Expect ';' after let variable declaration.");
+
+    defineVariable(global);
+}
+
 static void varDeclaration()
 {
-    uint8_t global = parseVariable("Expect variable name.");
+    uint8_t global = parseVariable("Expect variable name.", true);
 
     if (match(TOKEN_EQUAL)) {
         expression();
@@ -316,6 +344,7 @@ static void synchronize()
         case TOKEN_CLASS:
         case TOKEN_FUN:
         case TOKEN_VAR:
+        case TOKEN_LET:
         case TOKEN_FOR:
         case TOKEN_IF:
         case TOKEN_WHILE:
@@ -348,6 +377,8 @@ static void declaration()
 {
     if (match(TOKEN_VAR)) {
         varDeclaration();
+    } else if(match(TOKEN_LET)) {
+        letDeclaration();
     } else {
         statement();
     }
@@ -376,18 +407,30 @@ static void string(bool canAssign)
 static void namedVariable(Token name, bool canAssign)
 {
     uint8_t getOp, setOp;
-    int arg = resolveLocal(current, &name);
+
+    Local local;
+    int arg = resolveLocal(current, &name, &local);
+
+    bool mutable = false;
 
     if (arg != -1) {
         getOp = OP_GET_LOCAL;
         setOp = OP_SET_LOCAL;
+        mutable = local.mutable;
     } else {
         arg = identifierConstant(&name);
+        Global global = resolveGlobal(arg);
+        mutable = global.mutable;
+
         getOp = OP_GET_GLOBAL;
         setOp = OP_SET_GLOBAL;
     }
 
     if (canAssign && match(TOKEN_EQUAL)) {
+        if (!mutable) {
+            error("Cannot reassign let variable.");
+        }
+
         expression();
         emitBytes(setOp, arg);
     } else {
@@ -407,10 +450,9 @@ static void unary(bool canAssign)
     expression();
 
     switch (operatorType) {
-        case TOKEN_BANG:  emitByte(OP_NOT); break;
-        case TOKEN_MINUS: emitByte(OP_NEGATE); break;
-        default:
-            return;
+    case TOKEN_BANG: emitByte(OP_NOT); break;
+    case TOKEN_MINUS: emitByte(OP_NEGATE); break;
+    default: return;
     }
 }
 
@@ -455,6 +497,7 @@ ParseRule rules[] = {
     { NULL,     NULL,    PREC_NONE },       // TOKEN_THIS
     { literal,  NULL,    PREC_NONE },       // TOKEN_TRUE
     { NULL,     NULL,    PREC_NONE },       // TOKEN_VAR
+    { NULL,     NULL,    PREC_NONE },       // TOKEN_LET
     { NULL,     NULL,    PREC_NONE },       // TOKEN_WHILE
     { NULL,     NULL,    PREC_NONE },       // TOKEN_ERROR
     { NULL,     NULL,    PREC_NONE },       // TOKEN_EOF
@@ -504,7 +547,7 @@ static bool identifiersEqual(Token* a, Token* b)
     return memcmp(a->start, b->start, a->length) == 0;
 }
 
-static int resolveLocal(Compiler* compiler, Token* name)
+static int resolveLocal(Compiler* compiler, Token* name, Local* resolvedLocal)
 {
     for (int i = compiler->localCount - 1; i >= 0; i--) {
         Local* local = &compiler->locals[i];
@@ -513,6 +556,8 @@ static int resolveLocal(Compiler* compiler, Token* name)
                 error("Can't read local variable in its own initializer.");
             }
 
+            *resolvedLocal = *local;
+
             return i;
         }
     }
@@ -520,7 +565,7 @@ static int resolveLocal(Compiler* compiler, Token* name)
     return -1;
 }
 
-static void addLocal(Token name)
+static void addLocal(Token name, bool mutable)
 {
     if (current->localCount == UINT8_COUNT) {
         error("Too many local variables in function.");
@@ -530,9 +575,22 @@ static void addLocal(Token name)
     Local* local = &current->locals[current->localCount++];
     local->name = name;
     local->depth = -1;
+    local->mutable = mutable;
 }
 
-static void declareVariable()
+static Global resolveGlobal(uint8_t constant)
+{
+    return current->globals[constant];
+}
+
+static void addGlobal(uint8_t constant, Token name, bool mutable)
+{
+    Global* global = &current->globals[constant];
+    global->name = name;
+    global->mutable = mutable;
+}
+
+static void declareVariable(bool mutable)
 {
     if (current->scopeDepth == 0) return;
 
@@ -549,17 +607,20 @@ static void declareVariable()
         }
     }
 
-    addLocal(*name);
+    addLocal(*name, mutable);
 }
 
-static uint8_t parseVariable(const char* errorMessage)
+static uint8_t parseVariable(const char* errorMessage, bool mutable)
 {
     consume(TOKEN_IDENTIFIER, errorMessage);
 
-    declareVariable();
+    declareVariable(mutable);
     if (current->scopeDepth > 0) return 0;
 
-    return identifierConstant(&parser.previous);
+    uint8_t constant = identifierConstant(&parser.previous);
+    addGlobal(constant, parser.previous, mutable);
+
+    return constant;
 }
 
 static void markInitialized()
