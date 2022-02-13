@@ -270,6 +270,8 @@ static int resolveLocal(Compiler* compiler, Token* name, Local* resolvedLocal);
 static void addGlobal(uint8_t constant, Token name, bool mutable);
 static Global resolveGlobal(uint8_t constant);
 static void and_(bool canAssign);
+static void string(bool canAssign);
+static void number(bool canAssign);
 
 static void binary(bool canAssign)
 {
@@ -358,6 +360,62 @@ static void expressionStatement()
     expression();
     consume(TOKEN_SEMICOLON, "Expect ';' after expression.");
     emitByte(OP_POP);
+}
+
+static void switchStatement()
+{
+    consume(TOKEN_LEFT_PAREN, "Expect '(' after 'switch'.");
+    expression();
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after switch expression.");
+
+    // int conditionPosition = currentChunk()->count;
+    consume(TOKEN_LEFT_BRACE, "Expect '{' after switch condition.");
+
+    bool caseToken    = check(TOKEN_CASE);
+    bool defaultToken = check(TOKEN_DEFAULT);
+
+    bool defaultSpecified = false;
+
+    while (caseToken || defaultToken) {
+        if (caseToken) {
+            consume(TOKEN_CASE, "Expect 'case' in 'switch' block.");
+
+            // TODO: what about fallthrough? Peek next?
+            // Cannot be an expression, needs to be a constant.
+            if (match(TOKEN_STRING)) {
+                string(false);
+            } else if (match(TOKEN_NUMBER)) {
+                number(false);
+            } else {
+                error("Switch case expression must be a compile-time constant.");
+            }
+            // TODO: set result of expression to table (constants?)
+            // Then at runtime, search for the constant in the table,
+            // if not found, execute default branch.
+
+            consume(TOKEN_COLON, "Expect ':' after case expression.");
+
+            statement();
+        } else if (defaultToken) {
+            if (defaultSpecified) error("Expect single 'default' in switch.");
+            defaultSpecified = true;
+
+            consume(TOKEN_DEFAULT, "Expect 'default' case in 'switch' block.");
+            consume(TOKEN_COLON, "Expect ':' after default case in switch block.");
+
+            statement();
+        }
+
+        caseToken    = check(TOKEN_CASE);
+        defaultToken = check(TOKEN_DEFAULT);
+    }
+
+    consume(TOKEN_RIGHT_BRACE, "Expect '}' after switch block.");
+
+    if (!defaultSpecified) error("Expect 'default' case in switch block.");
+
+    // TODO cases
+    // use table?
 }
 
 static void forStatement()
@@ -479,6 +537,8 @@ static void statement()
 {
     if (match(TOKEN_PRINT)) {
         printStatement();
+    } else if (match(TOKEN_SWITCH)) {
+        switchStatement();
     } else if (match(TOKEN_FOR)) {
         forStatement();
     } else if (match(TOKEN_IF)) {
