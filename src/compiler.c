@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "common.h"
+#include "memory.h"
 #include "compiler.h"
 #include "scanner.h"
 
@@ -223,6 +224,16 @@ static void patchJump(int offset)
     currentChunk()->code[offset + 1] = jump & 0xff;
 }
 
+static void patchCaseJump(int offset, int jump)
+{
+    if (jump > UINT16_MAX) {
+        error("Too much code to jump over.");
+    }
+
+    currentChunk()->code[offset] = (jump >> 8) & 0xff;
+    currentChunk()->code[offset + 1] = jump & 0xff;
+}
+
 static void initCompiler(Compiler* compiler)
 {
     compiler->localCount = 0;
@@ -371,10 +382,14 @@ static void switchStatement()
     // int conditionPosition = currentChunk()->count;
     consume(TOKEN_LEFT_BRACE, "Expect '{' after switch condition.");
 
+    bool defaultSpecified = false;
+    int defaultJump = 0;
+
+    int* caseJumps = ALLOCATE(int, 1);
+    int caseCount  = 0;
+
     bool caseToken    = check(TOKEN_CASE);
     bool defaultToken = check(TOKEN_DEFAULT);
-
-    bool defaultSpecified = false;
 
     while (caseToken || defaultToken) {
         if (caseToken) {
@@ -389,11 +404,14 @@ static void switchStatement()
             } else {
                 error("Switch case expression must be a compile-time constant.");
             }
-            // TODO: set result of expression to table (constants?)
-            // Then at runtime, search for the constant in the table,
-            // if not found, execute default branch.
 
             consume(TOKEN_COLON, "Expect ':' after case expression.");
+
+            int caseJump = emitJump(OP_JUMP_IF_FALSE);
+
+            int previous = caseCount++;
+            caseJumps[previous] = caseJump;
+            caseJumps = GROW_ARRAY(caseJumps, int, previous, caseCount);
 
             statement();
         } else if (defaultToken) {
@@ -403,6 +421,8 @@ static void switchStatement()
             consume(TOKEN_DEFAULT, "Expect 'default' case in 'switch' block.");
             consume(TOKEN_COLON, "Expect ':' after default case in switch block.");
 
+            defaultJump = currentChunk()->count;
+            printf("Default jump: %d\n", defaultJump);
             statement();
         }
 
@@ -414,8 +434,14 @@ static void switchStatement()
 
     if (!defaultSpecified) error("Expect 'default' case in switch block.");
 
-    // TODO cases
-    // use table?
+    for (int i = 0; i < caseCount; ++i) {
+        int caseOffset = caseJumps[i];
+        patchCaseJump(caseOffset, defaultJump > caseOffset
+                                    ? defaultJump - caseOffset - 2
+                                    : caseOffset - defaultJump - 2);
+    }
+
+    FREE_ARRAY(int, caseJumps, caseCount);
 }
 
 static void forStatement()
