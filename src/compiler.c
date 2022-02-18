@@ -224,7 +224,7 @@ static void patchJump(int offset)
     currentChunk()->code[offset + 1] = jump & 0xff;
 }
 
-static void patchCaseJump(int offset, int jump)
+static void patchJumpLocation(int offset, int jump)
 {
     if (jump > UINT16_MAX) {
         error("Too much code to jump over.");
@@ -232,6 +232,13 @@ static void patchCaseJump(int offset, int jump)
 
     currentChunk()->code[offset] = (jump >> 8) & 0xff;
     currentChunk()->code[offset + 1] = jump & 0xff;
+}
+
+static void copyInstruction(int instructionStart, int length)
+{
+    for (int i = 0; i < length; ++i) {
+        emitByte(currentChunk()->code[instructionStart + i]);
+    }
 }
 
 static void initCompiler(Compiler* compiler)
@@ -376,27 +383,36 @@ static void expressionStatement()
 static void switchStatement()
 {
     consume(TOKEN_LEFT_PAREN, "Expect '(' after 'switch'.");
-    expression();
-    consume(TOKEN_RIGHT_PAREN, "Expect ')' after switch expression.");
 
-    // int conditionPosition = currentChunk()->count;
+    int expressionLocation = currentChunk()->count;
+    expression();
+    int expressionLength = currentChunk()->count - expressionLocation;
+
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after switch expression.");
     consume(TOKEN_LEFT_BRACE, "Expect '{' after switch condition.");
 
-    bool defaultSpecified = false;
-    int defaultJump = 0;
+    int* afterCaseJumps = ALLOCATE(int, 1);
+    int caseJumpCount   = 0;
 
-    int* caseJumps = ALLOCATE(int, 1);
-    int caseCount  = 0;
+    int defaultJump = 0;
 
     bool caseToken    = check(TOKEN_CASE);
     bool defaultToken = check(TOKEN_DEFAULT);
+
+    int caseJump = 0;
 
     while (caseToken || defaultToken) {
         if (caseToken) {
             consume(TOKEN_CASE, "Expect 'case' in 'switch' block.");
 
-            // TODO: what about fallthrough? Peek next?
-            // Cannot be an expression, needs to be a constant.
+            // If it's not the first case, need to add the switch expression
+            // instruction to the stack before processing rest of the case.
+            if (caseJump > 0) {
+                patchJumpLocation(caseJump,
+                                  currentChunk()->count - caseJump - 2);
+                copyInstruction(expressionLocation, expressionLength);
+            }
+
             if (match(TOKEN_STRING)) {
                 string(false);
             } else if (match(TOKEN_NUMBER)) {
@@ -406,42 +422,46 @@ static void switchStatement()
             }
 
             consume(TOKEN_COLON, "Expect ':' after case expression.");
-
-            int caseJump = emitJump(OP_JUMP_IF_FALSE);
-
-            int previous = caseCount++;
-            caseJumps[previous] = caseJump;
-            caseJumps = GROW_ARRAY(caseJumps, int, previous, caseCount);
+            caseJump = emitJump(OP_JUMP_IF_CASE_FALSE);
 
             statement();
+
         } else if (defaultToken) {
-            if (defaultSpecified) error("Expect single 'default' in switch.");
-            defaultSpecified = true;
+            if (defaultJump > 0) error("Expect single 'default' in switch.");
 
             consume(TOKEN_DEFAULT, "Expect 'default' case in 'switch' block.");
             consume(TOKEN_COLON, "Expect ':' after default case in switch block.");
 
             defaultJump = currentChunk()->count;
-            printf("Default jump: %d\n", defaultJump);
             statement();
         }
+
+        // After the statement is executed, need to skip to
+        // after the entire switch, instead falling through by defaul.
+        int afterCaseJump = emitJump(OP_JUMP);
+        emitByte(OP_POP);
+
+        int previous = caseJumpCount++;
+        afterCaseJumps[previous] = afterCaseJump;
+        afterCaseJumps = GROW_ARRAY(afterCaseJumps, int, previous, caseJumpCount);
 
         caseToken    = check(TOKEN_CASE);
         defaultToken = check(TOKEN_DEFAULT);
     }
 
+    if (defaultJump == 0) error("Expect 'default' case in switch block.");
     consume(TOKEN_RIGHT_BRACE, "Expect '}' after switch block.");
 
-    if (!defaultSpecified) error("Expect 'default' case in switch block.");
+    patchJumpLocation(caseJump, defaultJump - caseJump - 2);
 
-    for (int i = 0; i < caseCount; ++i) {
-        int caseOffset = caseJumps[i];
-        patchCaseJump(caseOffset, defaultJump > caseOffset
-                                    ? defaultJump - caseOffset - 2
-                                    : caseOffset - defaultJump - 2);
+    // Update all cases to jump to instruction after
+    // the entire switch-case block if they are matched.
+    for (int i = 0; i < caseJumpCount; ++i) {
+        int caseOffset = afterCaseJumps[i];
+        patchJump(caseOffset);
     }
 
-    FREE_ARRAY(int, caseJumps, caseCount);
+    FREE_ARRAY(int, afterCaseJumps, caseJumpCount);
 }
 
 static void forStatement()
