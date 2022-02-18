@@ -417,18 +417,22 @@ static void switchStatement()
 
             consume(TOKEN_COLON, "Expect ':' after case expression.");
             caseJump = emitJump(OP_JUMP_IF_CASE_FALSE);
-
-            statement();
-
         } else if (defaultToken) {
             if (defaultJump > 0) error("Expect single 'default' in switch.");
 
             consume(TOKEN_DEFAULT, "Expect 'default' case in 'switch' block.");
             consume(TOKEN_COLON, "Expect ':' after default case in switch block.");
 
-            defaultJump = currentChunk()->count;
-            statement();
+            // Skip default it it's the first case.
+            if (caseJump == 0) {
+                defaultJump = emitJump(OP_JUMP);
+                caseJump = defaultJump;
+            } else {
+                defaultJump = currentChunk()->count;
+            }
         }
+
+        statement();
 
         // After the statement is executed, need to skip to
         // after the entire switch, instead falling through by defaul.
