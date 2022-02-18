@@ -413,13 +413,7 @@ static void switchStatement()
                 copyInstruction(expressionLocation, expressionLength);
             }
 
-            if (match(TOKEN_STRING)) {
-                string(false);
-            } else if (match(TOKEN_NUMBER)) {
-                number(false);
-            } else {
-                error("Switch case expression must be a compile-time constant.");
-            }
+            expression();
 
             consume(TOKEN_COLON, "Expect ':' after case expression.");
             caseJump = emitJump(OP_JUMP_IF_CASE_FALSE);
