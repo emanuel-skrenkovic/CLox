@@ -72,9 +72,6 @@ int disassembleInstruction(Chunk* chunk, int offset)
     case OP_PRINT:
         return simpleInstruction("OP_PRINT", offset);
 
-    case OP_SIGNED_JUMP:
-        return signedJumpInstruction("OP_SIGNED_JUMP", chunk, offset);
-
     case OP_JUMP:
         return jumpInstruction("OP_JUMP", 1, chunk, offset);
 

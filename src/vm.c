@@ -240,14 +240,6 @@ static InterpretResult run()
             break;
         }
 
-        // TODO: don't like using a new instruction just for this.
-        case OP_SIGNED_JUMP : {
-            short offset = READ_SIGNED_SHORT();
-            printf("OFFSET: %d\n", offset);
-            vm.ip -= offset;
-            break;
-        }
-
         case OP_RETURN: {
             return INTERPRET_OK;
         }
