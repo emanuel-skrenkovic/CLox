@@ -58,6 +58,8 @@ static InterpretResult run()
 	#define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
     #define READ_SHORT() \
         (vm.ip += 2, (uint16_t)((vm.ip[-2] << 8) | vm.ip[-1]))
+    #define READ_SIGNED_SHORT() \
+        (vm.ip += 2, (short)((vm.ip[-2] << 8) | vm.ip[-1]))
     #define READ_STRING() AS_STRING(READ_CONSTANT())
 	#define BINARY_OP(valueType, op) \
 		do { \
@@ -220,8 +222,28 @@ static InterpretResult run()
             break;
         }
 
+        case OP_JUMP_IF_CASE_FALSE: {
+            short offset = READ_SIGNED_SHORT();
+            Value a = pop();
+            Value b = pop();
+
+            if (!valuesEqual(a, b)) {
+                vm.ip += offset;
+            }
+
+            break;
+        }
+
         case OP_LOOP: {
             uint16_t offset = READ_SHORT();
+            vm.ip -= offset;
+            break;
+        }
+
+        // TODO: don't like using a new instruction just for this.
+        case OP_SIGNED_JUMP : {
+            short offset = READ_SIGNED_SHORT();
+            printf("OFFSET: %d\n", offset);
             vm.ip -= offset;
             break;
         }
@@ -234,6 +256,7 @@ static InterpretResult run()
 
 	#undef BINARY_OP
     #undef READ_SHORT
+    #undef READ_SIGNED_SHORT
 	#undef READ_CONSTANT
     #undef READ_STRING
 	#undef READ_BYTE

@@ -1,0 +1,10 @@
+let a = 5;
+
+switch (a) {
+case 12: print "twelve";
+case 13: { print "thirteen"; }
+case 15: { print "fifteen"; }
+default: print "default";
+}
+
+print "switch over";
