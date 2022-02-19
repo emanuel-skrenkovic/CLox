@@ -551,6 +551,11 @@ static void whileStatement()
     emitByte(OP_POP);
 }
 
+static void continueStatement()
+{
+    consume(TOKEN_SEMICOLON, "Expect ';' after 'continue'.");
+}
+
 static void synchronize()
 {
     parser.panicMode = false;
@@ -589,6 +594,8 @@ static void statement()
         ifStatement();
     } else if (match(TOKEN_WHILE)) {
         whileStatement();
+    } else if (match(TOKEN_CONTINUE)) {
+        continueStatement();
     } else if (match(TOKEN_LEFT_BRACE)) {
         beginScope();
         block();
