@@ -26,7 +26,6 @@ def test(func):
 
 def run_test(test_file):
     process = subprocess.run([executable, tests_path + test_file], check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
     return TestStatus(process.returncode, str(process.stdout), str(process.stderr))
 
 
@@ -82,10 +81,10 @@ if __name__ == "__main__":
 
         try:
             test_result = test_func()
-            print("[INFO]  " + "\'{}\' ->".format(test_name) + " \x1b[1;32;40m" + "Success!" + "\x1b[0m")
+            print("[INFO]  \'{}\' -> \x1b[1;32;40m Success! \x1b[0m".format(test_name))
         except AssertionError as error:
             if failed != True:
                 failed = True
-            print("\x1b[1;31;40m" + "[ERROR] \x1b[0m" + "\'{}\' -> ".format(test_name) + "{}".format(error))
+            print("\x1b[1;31;40m[ERROR] \x1b[0m\'{}\'-> {}".format(test_name, error))
 
     sys.exit(failed)
