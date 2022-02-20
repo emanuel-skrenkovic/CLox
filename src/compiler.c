@@ -478,8 +478,7 @@ static void forStatement()
         expressionStatement();
     }
 
-    int loopStart = currentChunk()->count;
-    current->loopStart = loopStart;
+    int loopStart = current->loopStart = currentChunk()->count;
 
     int exitJump = -1;
     if (!match(TOKEN_SEMICOLON)) {
@@ -500,8 +499,7 @@ static void forStatement()
 
         emitLoop(loopStart);
 
-        loopStart = incrementStart;
-        current->loopStart =loopStart;
+        loopStart = current->loopStart = incrementStart;
 
         patchJump(bodyJump);
     }
@@ -547,7 +545,8 @@ static void printStatement()
 
 static void whileStatement()
 {
-    int loopStart = currentChunk()->count;
+    int loopStart = current->loopStart = currentChunk()->count;
+
     consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
     expression();
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
@@ -558,6 +557,8 @@ static void whileStatement()
     emitLoop(loopStart);
 
     patchJump(exitJump);
+    current->loopStart = -1;
+
     emitByte(OP_POP);
 }
 
