@@ -58,6 +58,8 @@ typedef struct {
     Global globals[UINT8_COUNT];
 
     int scopeDepth;
+
+    int loopStart;
 } Compiler;
 
 Parser parser;
@@ -245,6 +247,7 @@ static void initCompiler(Compiler* compiler)
 {
     compiler->localCount = 0;
     compiler->scopeDepth = 0;
+    compiler->loopStart = -1;
     current = compiler;
 }
 
@@ -475,7 +478,8 @@ static void forStatement()
         expressionStatement();
     }
 
-    int loopStart = currentChunk()->count;
+    int loopStart = current->loopStart = currentChunk()->count;
+
     int exitJump = -1;
     if (!match(TOKEN_SEMICOLON)) {
         expression();
@@ -494,7 +498,9 @@ static void forStatement()
         consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
 
         emitLoop(loopStart);
-        loopStart = incrementStart;
+
+        loopStart = current->loopStart = incrementStart;
+
         patchJump(bodyJump);
     }
 
@@ -507,6 +513,8 @@ static void forStatement()
     }
 
     endScope();
+
+    current->loopStart = -1;
 }
 
 static void ifStatement()
@@ -537,7 +545,8 @@ static void printStatement()
 
 static void whileStatement()
 {
-    int loopStart = currentChunk()->count;
+    int loopStart = current->loopStart = currentChunk()->count;
+
     consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
     expression();
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
@@ -548,7 +557,15 @@ static void whileStatement()
     emitLoop(loopStart);
 
     patchJump(exitJump);
+    current->loopStart = -1;
+
     emitByte(OP_POP);
+}
+
+static void continueStatement()
+{
+    consume(TOKEN_SEMICOLON, "Expect ';' after 'continue'.");
+    emitLoop(current->loopStart);
 }
 
 static void synchronize()
@@ -589,6 +606,8 @@ static void statement()
         ifStatement();
     } else if (match(TOKEN_WHILE)) {
         whileStatement();
+    } else if (match(TOKEN_CONTINUE)) {
+        continueStatement();
     } else if (match(TOKEN_LEFT_BRACE)) {
         beginScope();
         block();

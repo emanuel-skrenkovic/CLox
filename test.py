@@ -72,6 +72,18 @@ def test_assignment_get_constant():
     assert result.exit_code == 0, result.stderr
 
 
+@test
+def test_continue_for():
+    result = run_test("continue_for.lox")
+    assert result.exit_code == 0, result.stderr
+
+
+@test
+def test_continue_while():
+    result = run_test("continue_while.lox")
+    assert result.exit_code == 0, result.stderr
+
+
 if __name__ == "__main__":
     for test in get_tests():
         test_name = test[0]
