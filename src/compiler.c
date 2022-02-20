@@ -58,6 +58,8 @@ typedef struct {
     Global globals[UINT8_COUNT];
 
     int scopeDepth;
+
+    int loopStart;
 } Compiler;
 
 Parser parser;
@@ -245,6 +247,7 @@ static void initCompiler(Compiler* compiler)
 {
     compiler->localCount = 0;
     compiler->scopeDepth = 0;
+    compiler->loopStart = -1;
     current = compiler;
 }
 
@@ -476,6 +479,8 @@ static void forStatement()
     }
 
     int loopStart = currentChunk()->count;
+    current->loopStart = loopStart;
+
     int exitJump = -1;
     if (!match(TOKEN_SEMICOLON)) {
         expression();
@@ -494,7 +499,10 @@ static void forStatement()
         consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
 
         emitLoop(loopStart);
+
         loopStart = incrementStart;
+        current->loopStart =loopStart;
+
         patchJump(bodyJump);
     }
 
@@ -507,6 +515,8 @@ static void forStatement()
     }
 
     endScope();
+
+    current->loopStart = -1;
 }
 
 static void ifStatement()
@@ -554,6 +564,7 @@ static void whileStatement()
 static void continueStatement()
 {
     consume(TOKEN_SEMICOLON, "Expect ';' after 'continue'.");
+    emitLoop(current->loopStart);
 }
 
 static void synchronize()
