@@ -84,6 +84,24 @@ def test_continue_while():
     assert result.exit_code == 0, result.stderr
 
 
+@test
+def test_function():
+    result = run_test("function.lox")
+    assert result.exit_code == 0, result.stderr
+
+
+@test
+def test_function_stack_trace():
+    result = run_test("function_stack_trace.lox")
+    assert result.exit_code == 70, result.stderr
+
+
+@test
+def test_function_native():
+    result = run_test("function_native.lox")
+    assert result.exit_code == 0, result.stderr
+
+
 if __name__ == "__main__":
     for test in get_tests():
         test_name = test[0]
