@@ -1024,7 +1024,7 @@ static ParseRule* getRule(TokenType type)
 
 ObjFunction* compile(const char* source)
 {
-	initScanner(source);
+    initScanner(source);
     Compiler compiler;
     initCompiler(&compiler, TYPE_SCRIPT);
 

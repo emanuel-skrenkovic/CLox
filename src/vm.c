@@ -12,6 +12,9 @@
 
 VM vm;
 
+
+static void runtimeError(const char* format, ...);
+
 static Value clockNative(int argCount, Value* args)
 {
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
@@ -43,12 +46,11 @@ static void concatenate()
 
 static void resetStack()
 {
-	vm.stackTop = vm.stack;
+    vm.stackTop = vm.stack;
     vm.frameCount = 0;
 }
 
-static
-void runtimeError(const char* format, ...)
+static void runtimeError(const char* format, ...)
 {
     va_list args; 
     va_start(args, format);
@@ -74,10 +76,10 @@ void runtimeError(const char* format, ...)
     resetStack();
 }
 
-static void defineNative(const char* name, NativeFn function)
+static void defineNative(const char* name, NativeFn function, int arity)
 {
     push(OBJ_VAL(copyString(name, (int)strlen(name))));
-    push(OBJ_VAL(newNative(function)));
+    push(OBJ_VAL(newNative(function, arity)));
 
     tableSet(&vm.globals, AS_STRING(vm.stack[0]), vm.stack[1]);
 
@@ -89,9 +91,9 @@ static InterpretResult run()
 {
     CallFrame* frame = &vm.frames[vm.frameCount - 1];
 
-	#define READ_BYTE() (*frame->ip++)
+    #define READ_BYTE() (*frame->ip++)
 
-	#define READ_CONSTANT() (frame->function->chunk.constants.values[READ_BYTE()])
+    #define READ_CONSTANT() (frame->function->chunk.constants.values[READ_BYTE()])
 
     #define READ_SHORT() \
         (frame->ip += 2, \
@@ -102,32 +104,32 @@ static InterpretResult run()
         (short)((frame->ip[-2] << 8) | frame->ip[-1]))
 
     #define READ_STRING() AS_STRING(READ_CONSTANT())
-	#define BINARY_OP(valueType, op) \
-		do { \
+    #define BINARY_OP(valueType, op)                              \
+        do {                                                  \
             if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
                 runtimeError("Operands must be numbers."); \
                 return INTERPRET_RUNTIME_ERROR; \
             } \
-			double b = AS_NUMBER(pop()); \
-			double a = AS_NUMBER(pop()); \
-			push(valueType(a op b)); \
-		} while (false)
+            double b = AS_NUMBER(pop()); \
+            double a = AS_NUMBER(pop()); \
+            push(valueType(a op b));     \
+        } while (false)
 
-	for(;;) {
+    for(;;) {
 #ifdef DEBUG_TRACE_EXECUTION
-		printf("          ");
-		for (Value* slot = vm.stack; slot < vm.stackTop; slot++) {
-			printf("[ ");
-			printValue(*slot);
-			printf(" ]");
-		}
-		printf("\n");
-		disassembleInstruction(&frame->function->chunk,
+        printf("          ");
+        for (Value* slot = vm.stack; slot < vm.stackTop; slot++) {
+            printf("[ ");
+            printValue(*slot);
+            printf(" ]");
+        }
+        printf("\n");
+        disassembleInstruction(&frame->function->chunk,
                                (int)(frame->ip - frame->function->chunk.code));
 #endif
 
-		uint8_t instruction;
-		switch (instruction = READ_BYTE()) {
+        uint8_t instruction;
+        switch (instruction = READ_BYTE()) {
         case OP_CONSTANT: {
             Value constant = READ_CONSTANT();
             push(constant);
@@ -308,25 +310,25 @@ static InterpretResult run()
 
             break;
         }
-		}
-	}
+        }
+    }
 
-	#undef BINARY_OP
+    #undef BINARY_OP
     #undef READ_SHORT
     #undef READ_SIGNED_SHORT
-	#undef READ_CONSTANT
+    #undef READ_CONSTANT
     #undef READ_STRING
-	#undef READ_BYTE
+    #undef READ_BYTE
 }
 
 void initVM() 
 {
-	resetStack();	
+    resetStack();
     vm.objects = NULL;
     initTable(&vm.globals);
     initTable(&vm.strings);
 
-    defineNative("clock", clockNative);
+    defineNative("clock", clockNative, 0);
 }
 
 void freeVM() 
@@ -338,14 +340,14 @@ void freeVM()
 
 void push(Value value)
 {
-	*vm.stackTop = value;
-	vm.stackTop++;
+    *vm.stackTop = value;
+    vm.stackTop++;
 }
 
 Value pop()
 {
-	vm.stackTop--;
-	return *vm.stackTop;
+    vm.stackTop--;
+    return *vm.stackTop;
 }
 
 Value peek(int distance)
@@ -380,8 +382,16 @@ static bool callValue(Value callee, int argCount)
             case OBJ_FUNCTION:
                 return call(AS_FUNCTION(callee), argCount);
             case OBJ_NATIVE: {
-                NativeFn native = AS_NATIVE(callee);
-                Value result = native(argCount, vm.stackTop - argCount);
+                ObjNative* native = AS_NATIVE(callee);
+
+                if (argCount != native->arity) {
+                    runtimeError("Expected %d arguments but got %d.",
+                                native->arity, argCount);
+                    return false;
+                }
+
+                NativeFn nativeFn = native->function;
+                Value result = nativeFn(argCount, vm.stackTop - argCount);
                 vm.stackTop -= argCount + 1;
                 push(result);
                 return true;

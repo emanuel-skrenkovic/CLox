@@ -25,7 +25,10 @@ def test(func):
 
 
 def run_test(test_file):
-    process = subprocess.run([executable, tests_path + test_file], check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process = subprocess.run([executable, tests_path + test_file],
+                             check=False,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
     return TestStatus(process.returncode, str(process.stdout), str(process.stderr))
 
 
@@ -100,6 +103,12 @@ def test_function_stack_trace():
 def test_function_native():
     result = run_test("function_native.lox")
     assert result.exit_code == 0, result.stderr
+
+
+@test
+def test_function_native_arity():
+    result = run_test("function_native_arity.lox")
+    assert result.exit_code == 70, result.stderr
 
 
 if __name__ == "__main__":
