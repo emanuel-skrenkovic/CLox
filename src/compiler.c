@@ -49,7 +49,14 @@ typedef struct {
     Token name;
     int depth;
     bool mutable;
+    bool isCaptured;
 } Local;
+
+typedef struct {
+    uint8_t index;
+    bool mutable;
+    bool isLocal;
+} Upvalue;
 
 typedef enum {
     TYPE_FUNCTION,
@@ -63,13 +70,14 @@ typedef struct {
 
     Local locals[UINT8_COUNT];
     int localCount;
-
-    Global globals[UINT8_COUNT];
+    Upvalue upvalues[UINT8_COUNT];
 
     int scopeDepth;
 
     int loopStart;
 } Compiler;
+
+Global globals[UINT8_COUNT];
 
 Parser parser;
 Compiler* current = NULL;
@@ -272,6 +280,7 @@ static void initCompiler(Compiler* compiler, FunctionType type)
 
     Local* local = &current->locals[current->localCount++];
     local->depth = 0;
+    local->isCaptured = false;
     local->name.start = "";
     local->name.length = 0;
 }
@@ -303,7 +312,13 @@ static void endScope()
 
     while (current->localCount > 0
            && current->locals[current->localCount - 1].depth > current->scopeDepth) {
-        emitByte(OP_POP);
+
+        if (current->locals[current->localCount - 1].isCaptured) {
+            emitByte(OP_CLOSE_UPVALUE);
+        } else {
+            emitByte(OP_POP);
+        }
+
         current->localCount--;
     }
 }
@@ -319,12 +334,13 @@ static void defineVariable(uint8_t global);
 static uint8_t identifierConstant(Token* name);
 static int resolveLocal(Compiler* compiler, Token* name, Local* resolvedLocal);
 static void addGlobal(uint8_t constant, Token name, bool mutable);
-static Global resolveGlobal(uint8_t constant);
+static Global* resolveGlobal(uint8_t constant);
 static void and_(bool canAssign);
 static void string(bool canAssign);
 static void number(bool canAssign);
 static void markInitialized();
 static uint8_t argumentList();
+static int resolveUpvalue(Compiler* compiler, Token* name, Local* localValue);
 
 static void binary(bool canAssign)
 {
@@ -407,7 +423,12 @@ static void function(FunctionType type)
     block();
 
     ObjFunction* function = endCompiler();
-    emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(function)));
+    emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
+
+    for (int i = 0; i < function->upvalueCount; ++i) {
+        emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
+        emitByte(compiler.upvalues[i].index);
+    }
 }
 
 static void funDeclaration()
@@ -767,10 +788,17 @@ static void namedVariable(Token name, bool canAssign)
         getOp = OP_GET_LOCAL;
         setOp = OP_SET_LOCAL;
         mutable = local.mutable;
+    } else if((arg = resolveUpvalue(current, &name, &local)) != -1) {
+        printf("Resolving upvalue in named variable\n");
+        getOp = OP_GET_UPVALUE;
+        setOp = OP_SET_UPVALUE;
+        mutable = local.mutable;
     } else {
         arg = identifierConstant(&name);
-        Global global = resolveGlobal(arg);
-        mutable = global.mutable;
+        Global* global = resolveGlobal(arg);
+        mutable = global->mutable;
+
+        printf("Global mutable: %d\n", global->mutable);
 
         getOp = OP_GET_GLOBAL;
         setOp = OP_SET_GLOBAL;
@@ -926,16 +954,57 @@ static void addLocal(Token name, bool mutable)
     local->name = name;
     local->depth = -1;
     local->mutable = mutable;
+    local->isCaptured = false;
 }
 
-static Global resolveGlobal(uint8_t constant)
+static int addUpvalue(Compiler* compiler, uint8_t index, bool isLocal, bool mutable)
 {
-    return current->globals[constant];
+    int upvalueCount = compiler->function->upvalueCount;
+
+    for (int i = 0; i < upvalueCount; ++i) {
+        Upvalue* upvalue = &compiler->upvalues[i];
+        if (upvalue->index == index && upvalue->isLocal == isLocal) {
+            return i;
+        }
+    }
+
+    if (upvalueCount == UINT8_COUNT) {
+        error("Too many closure variables in function.");
+        return 0;
+    }
+
+    compiler->upvalues[upvalueCount].mutable = true;
+    compiler->upvalues[upvalueCount].isLocal = isLocal;
+    compiler->upvalues[upvalueCount].index = index;
+    return compiler->function->upvalueCount++;
+}
+
+static int resolveUpvalue(Compiler* compiler, Token* name, Local* localValue)
+{
+    if (compiler->enclosing == NULL) return -1;
+
+    int local = resolveLocal(compiler->enclosing, name, localValue);
+    if (local != -1) {
+        localValue->isCaptured = true;
+        return addUpvalue(compiler, (uint8_t)local, true, localValue->mutable);
+    }
+
+    int upvalue = resolveUpvalue(compiler->enclosing, name, localValue);
+    if (upvalue != -1) {
+        return addUpvalue(compiler, (uint8_t)upvalue, false, localValue->mutable);
+    }
+
+    return -1;
+}
+
+static Global* resolveGlobal(uint8_t constant)
+{
+    return &globals[constant];
 }
 
 static void addGlobal(uint8_t constant, Token name, bool mutable)
 {
-    Global* global = &current->globals[constant];
+    Global* global = &globals[constant];
     global->name = name;
     global->mutable = mutable;
 }
