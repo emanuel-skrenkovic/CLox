@@ -111,6 +111,30 @@ def test_function_native_arity():
     assert result.exit_code == 70, result.stderr
 
 
+@test
+def test_closure_1():
+    result = run_test("closure.lox")
+    assert result.exit_code == 0, result.stderr
+
+
+@test
+def test_closure_2():
+    result = run_test("closure2.lox")
+    assert result.exit_code == 0, result.stderr
+
+
+@test
+def test_closure_mutate_local():
+    result = run_test("closure_mutate_local.lox")
+    assert result.exit_code == 0, result.stderr
+
+
+@test
+def test_closure_mutate_global():
+    result = run_test("closure_mutate_global.lox")
+    assert result.exit_code == 0, result.stderr
+
+
 if __name__ == "__main__":
     for test in get_tests():
         test_name = test[0]

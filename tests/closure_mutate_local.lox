@@ -1,0 +1,13 @@
+fun mutation() {
+    var mutable = 5;
+
+    fun mutation2() {
+        mutable = 3;
+    }
+
+    mutation2();
+
+    return mutable;
+}
+
+print mutation() == 3;

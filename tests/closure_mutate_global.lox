@@ -1,0 +1,8 @@
+var mutable = 5;
+fun mutation() {
+    mutable = 3;
+}
+
+mutation();
+
+print mutable;
